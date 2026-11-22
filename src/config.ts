@@ -1,0 +1,28 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import dotenv from 'dotenv'
+
+dotenv.config()
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const backendRoot = path.resolve(__dirname, '..')
+
+export const config = {
+  port: Number(process.env.PORT ?? 3001),
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  apiPrefix: process.env.API_PREFIX ?? '/api/v1',
+  botToken: process.env.BOT_TOKEN ?? '',
+  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  databaseUrl: process.env.DATABASE_URL ?? '',
+  databaseUrlUnpooled:
+    process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? '',
+  databasePath: path.resolve(
+    backendRoot,
+    process.env.DATABASE_PATH ?? './data/yol.sqlite',
+  ),
+  uploadDir: path.resolve(
+    backendRoot,
+    process.env.UPLOAD_DIR ?? './uploads/avatars',
+  ),
+  publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:3001',
+}
