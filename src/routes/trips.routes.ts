@@ -2,7 +2,13 @@ import crypto from 'node:crypto'
 import { Router } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/index.js'
-import { authMiddleware, publicAvatarUrl } from '../middleware/auth.js'
+import { authMiddleware } from '../middleware/auth.js'
+import {
+  getPublishStatus,
+  serializeTrip,
+  TRIP_SELECT_JOIN,
+  type TripRow,
+} from '../utils/tripDto.js'
 
 export const tripsRouter = Router()
 
@@ -12,9 +18,7 @@ tripsRouter.get('/', async (_req, res, next) => {
   const { from, to, date, filter } = _req.query
 
   let sql = `
-    SELECT t.*, u.full_name, u.phone, u.avatar_path
-    FROM trips t
-    JOIN users u ON u.id = t.driver_user_id
+    ${TRIP_SELECT_JOIN}
     WHERE t.status = 'active' AND t.available_seats > 0
   `
   const params: string[] = []
@@ -31,6 +35,11 @@ tripsRouter.get('/', async (_req, res, next) => {
     sql += ` AND t.departure_date = ?`
     params.push(String(date))
   }
+  const passengers = _req.query.passengers
+  if (passengers) {
+    sql += ` AND t.available_seats >= ?`
+    params.push(String(passengers))
+  }
 
   if (filter === 'cheapest') sql += ` ORDER BY t.price_per_seat ASC`
   else if (filter === 'earliest') sql += ` ORDER BY t.departure_date, t.departure_time`
@@ -44,14 +53,37 @@ tripsRouter.get('/', async (_req, res, next) => {
   }
 })
 
+tripsRouter.get('/mine', authMiddleware, async (req, res, next) => {
+  try {
+    const db = getDb()
+    const rows = await db
+      .prepare(
+        `${TRIP_SELECT_JOIN}
+         WHERE t.driver_user_id = ?
+         ORDER BY t.created_at DESC`,
+      )
+      .all<TripRow>(req.authUser!.id)
+    res.json(rows.map(serializeTrip))
+  } catch (err) {
+    next(err)
+  }
+})
+
+tripsRouter.get('/publish-status', authMiddleware, async (req, res, next) => {
+  try {
+    const db = getDb()
+    const status = await getPublishStatus(db, req.authUser!.id)
+    res.json(status)
+  } catch (err) {
+    next(err)
+  }
+})
+
 tripsRouter.get('/:id', async (req, res, next) => {
   try {
   const db = getDb()
   const row = await db
-    .prepare(
-      `SELECT t.*, u.full_name, u.phone, u.avatar_path
-       FROM trips t JOIN users u ON u.id = t.driver_user_id WHERE t.id = ?`,
-    )
+    .prepare(`${TRIP_SELECT_JOIN} WHERE t.id = ?`)
     .get<TripRow>(req.params.id)
 
   if (!row) {
@@ -90,6 +122,15 @@ tripsRouter.post('/', async (req, res, next) => {
   }
 
   const db = getDb()
+  const publishStatus = await getPublishStatus(db, req.authUser!.id)
+  if (!publishStatus.allowed) {
+    res.status(429).json({
+      error: '24 soat ichida maksimal 2 ta e’lon joylashtirish mumkin',
+      ...publishStatus,
+    })
+    return
+  }
+
   const id = `trip-${crypto.randomUUID()}`
   const b = parsed.data
 
@@ -145,54 +186,3 @@ tripsRouter.patch('/:id/complete', async (req, res, next) => {
     next(err)
   }
 })
-
-interface TripRow {
-  id: string
-  driver_user_id: string
-  route_id: string
-  from_city: string
-  to_city: string
-  departure_date: string
-  departure_time: string
-  pickup_address: string
-  available_seats: number
-  total_seats: number
-  price_per_seat: number
-  has_ac: number
-  has_trunk: number
-  has_wifi: number
-  note: string | null
-  status: string
-  full_name: string
-  phone: string
-  avatar_path: string | null
-}
-
-function serializeTrip(row: TripRow) {
-  return {
-    id: row.id,
-    routeId: row.route_id,
-    from: row.from_city,
-    to: row.to_city,
-    departureDate: row.departure_date,
-    departureTime: row.departure_time,
-    pickupAddress: row.pickup_address,
-    availableSeats: row.available_seats,
-    totalSeats: row.total_seats,
-    pricePerSeat: row.price_per_seat,
-    hasAirConditioner: Boolean(row.has_ac),
-    hasLargeTrunk: Boolean(row.has_trunk),
-    hasWifi: Boolean(row.has_wifi),
-    note: row.note,
-    status: row.status,
-    driver: {
-      id: row.driver_user_id,
-      name: row.full_name,
-      phone: row.phone,
-      avatarUrl: publicAvatarUrl(row.avatar_path),
-      rating: 4.9,
-      tripCount: 1,
-      verified: true,
-    },
-  }
-}

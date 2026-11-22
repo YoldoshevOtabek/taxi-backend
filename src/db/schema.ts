@@ -63,6 +63,11 @@ const INIT_SQL = `
   );
 `
 
+const PATCH_SQL = `
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
+`
+
 export async function migrate(db: SqlClient): Promise<void> {
   await db.exec(INIT_SQL)
+  await db.exec(PATCH_SQL)
 }

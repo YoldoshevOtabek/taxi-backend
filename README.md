@@ -50,6 +50,32 @@ Development (BOT_TOKEN bo‘lmasa): imzo tekshiruvi yumshoq; yoki `X-Demo-User-I
 
 `POST /auth/telegram` — `{ "initData": "...", "role": "driver" | "passenger" }`
 
+## Haydovchi e’lon limiti
+
+24 soat ichida **2 ta** e’lon: `GET /trips/publish-status` → `{ allowed, limit, used, remaining, nextAllowedAt }`.
+
+## Admin panel (bitta admin)
+
+Alohida `admin` roli yo‘q — faqat `.env` dagi login/token.
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=...
+ADMIN_API_TOKEN=uzun_tasodifiy_token
+```
+
+| Method | Endpoint | Tavsif |
+|--------|----------|--------|
+| POST | `/admin/login` | `{ username, password }` → `{ token, tokenType: "Bearer" }` |
+| * | `/admin/*` | `Authorization: Bearer <ADMIN_API_TOKEN>` |
+| GET | `/admin/overview` | Statistika |
+| GET | `/admin/users` | `?role=driver\|passenger&search=&limit=&offset=` |
+| GET/PATCH/DELETE | `/admin/users/:id` | Profil, bloklash (`isBlocked`), mashina |
+| GET/PATCH | `/admin/trips` | Barcha e’lonlar |
+| GET/DELETE | `/admin/passenger-requests` | Talablar |
+
+Bloklangan foydalanuvchi mini-app API ga kira olmaydi (403).
+
 ## Frontend ulanish
 
 `.env` (frontend):

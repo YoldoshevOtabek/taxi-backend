@@ -11,8 +11,8 @@ passengerRequestsRouter.get('/', async (_req, res, next) => {
     const db = getDb()
     const rows = await db
       .prepare(`SELECT * FROM passenger_requests ORDER BY created_at DESC`)
-      .all()
-    res.json(rows)
+      .all<PassengerRequestRow>()
+    res.json(rows.map(serializePassengerRequest))
   } catch (err) {
     next(err)
   }
@@ -71,3 +71,35 @@ passengerRequestsRouter.post('/', async (req, res, next) => {
     next(err)
   }
 })
+
+interface PassengerRequestRow {
+  id: string
+  user_id: string
+  route_id: string
+  from_city: string
+  to_city: string
+  request_date: string
+  passenger_count: number
+  preferred_time: string
+  offered_price: number
+  phone: string
+  note: string | null
+  created_at: string
+}
+
+function serializePassengerRequest(row: PassengerRequestRow) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    from: row.from_city,
+    to: row.to_city,
+    routeId: row.route_id,
+    date: row.request_date,
+    passengerCount: row.passenger_count,
+    preferredTime: row.preferred_time,
+    offeredPrice: row.offered_price,
+    phone: row.phone,
+    note: row.note ?? undefined,
+    createdAt: row.created_at,
+  }
+}

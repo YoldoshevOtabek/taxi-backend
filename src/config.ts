@@ -25,4 +25,7 @@ export const config = {
     process.env.UPLOAD_DIR ?? './uploads/avatars',
   ),
   publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:3001',
+  adminUsername: process.env.ADMIN_USERNAME ?? 'Otabek',
+  adminPassword: process.env.ADMIN_PASSWORD ?? '',
+  adminApiToken: process.env.ADMIN_API_TOKEN ?? '',
 }

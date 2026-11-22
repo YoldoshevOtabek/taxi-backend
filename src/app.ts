@@ -8,6 +8,8 @@ import { authRouter } from './routes/auth.routes.js'
 import { profileRouter } from './routes/profile.routes.js'
 import { tripsRouter } from './routes/trips.routes.js'
 import { passengerRequestsRouter } from './routes/passengerRequests.routes.js'
+import { favoritesRouter } from './routes/favorites.routes.js'
+import { adminRouter } from './routes/admin.routes.js'
 import { apiIndexBody, mountSwagger, swaggerPath } from './docs/swagger.js'
 import { pingDb } from './db/index.js'
 
@@ -63,6 +65,8 @@ export function createApp() {
   api.use('/users', profileRouter)
   api.use('/trips', tripsRouter)
   api.use('/passenger-requests', passengerRequestsRouter)
+  api.use('/favorites', favoritesRouter)
+  api.use('/admin', adminRouter)
 
   app.use(config.apiPrefix, api)
 

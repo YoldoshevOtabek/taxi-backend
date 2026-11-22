@@ -33,11 +33,15 @@ export async function authMiddleware(
     if (demoUserId && typeof demoUserId === 'string' && config.nodeEnv === 'development') {
       const row = await db
         .prepare(
-          `SELECT id, telegram_id, role, full_name, phone, avatar_path FROM users WHERE id = ?`,
+          `SELECT id, telegram_id, role, full_name, phone, avatar_path, is_blocked FROM users WHERE id = ?`,
         )
         .get<AuthUserRow>(demoUserId)
 
       if (row) {
+        if (isBlocked(row)) {
+          res.status(403).json({ error: 'Hisob bloklangan' })
+          return
+        }
         req.authUser = mapRow(row)
         next()
         return
@@ -58,7 +62,7 @@ export async function authMiddleware(
     const telegramId = String(parsed.user.id)
     let row = await db
       .prepare(
-        `SELECT id, telegram_id, role, full_name, phone, avatar_path FROM users WHERE telegram_id = ?`,
+        `SELECT id, telegram_id, role, full_name, phone, avatar_path, is_blocked FROM users WHERE telegram_id = ?`,
       )
       .get<AuthUserRow>(telegramId)
 
@@ -72,13 +76,18 @@ export async function authMiddleware(
         .run(id, telegramId, fullName)
       row = await db
         .prepare(
-          `SELECT id, telegram_id, role, full_name, phone, avatar_path FROM users WHERE id = ?`,
+          `SELECT id, telegram_id, role, full_name, phone, avatar_path, is_blocked FROM users WHERE id = ?`,
         )
         .get<AuthUserRow>(id)
     }
 
     if (!row) {
       res.status(500).json({ error: 'Foydalanuvchi yaratilmadi' })
+      return
+    }
+
+    if (isBlocked(row)) {
+      res.status(403).json({ error: 'Hisob bloklangan' })
       return
     }
 
@@ -96,6 +105,11 @@ interface AuthUserRow {
   full_name: string
   phone: string
   avatar_path: string | null
+  is_blocked?: boolean | number
+}
+
+function isBlocked(row: AuthUserRow): boolean {
+  return Boolean(row.is_blocked)
 }
 
 function mapRow(row: AuthUserRow): AuthUser {
