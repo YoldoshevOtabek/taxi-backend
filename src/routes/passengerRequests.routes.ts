@@ -134,10 +134,9 @@ passengerRequestsRouter.patch('/:id', async (req, res, next) => {
       return
     }
 
-    const nextStatus = parsed.data.status === 'active' ? 'active' : 'completed'
     await db
       .prepare(`UPDATE passenger_requests SET status = ? WHERE id = ?`)
-      .run(nextStatus, req.params.id)
+      .run('completed', req.params.id)
 
     res.json({ ok: true })
   } catch (err) {
