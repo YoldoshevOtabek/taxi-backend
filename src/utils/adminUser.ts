@@ -27,8 +27,8 @@ export async function grantPublishBonus(db: SqlClient, userId: string, amount = 
     await db
       .prepare(
         `INSERT INTO driver_settings (
-          user_id, car_model, car_color, plate_number, driver_mode_enabled, can_publish, publish_bonus
-        ) VALUES (?, '', '', '', 1, TRUE, ?)`,
+          user_id, car_model, car_color, plate_number, driver_mode_enabled, can_publish, publish_bonus, publish_bonus_expires_at
+        ) VALUES (?, '', '', '', 1, TRUE, ?, NOW() + INTERVAL '24 hours')`,
       )
       .run(userId, amount)
     return amount
@@ -37,7 +37,8 @@ export async function grantPublishBonus(db: SqlClient, userId: string, amount = 
   await db
     .prepare(
       `UPDATE driver_settings
-       SET publish_bonus = publish_bonus + ?
+       SET publish_bonus = publish_bonus + ?,
+           publish_bonus_expires_at = NOW() + INTERVAL '24 hours'
        WHERE user_id = ?`,
     )
     .run(amount, userId)

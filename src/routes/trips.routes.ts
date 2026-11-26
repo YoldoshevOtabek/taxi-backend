@@ -14,11 +14,13 @@ import {
   userCanPublishTrips,
   userPublishSummary,
 } from '../utils/adminUser.js'
+import { runLifecycle } from '../jobs/lifecycle.js'
 
 export const tripsRouter = Router()
 
 tripsRouter.get('/', async (_req, res, next) => {
   try {
+  await runLifecycle()
   const db = getDb()
   const { from, to, date, filter } = _req.query
 
@@ -84,24 +86,10 @@ tripsRouter.get('/publish-status', authMiddleware, async (req, res, next) => {
   }
 })
 
-tripsRouter.get('/:id', async (req, res, next) => {
-  try {
-  const db = getDb()
-  const row = await db
-    .prepare(`${TRIP_SELECT_JOIN} WHERE t.id = ?`)
-    .get<TripRow>(req.params.id)
-
-  if (!row) {
-    res.status(404).json({ error: 'Topilmadi' })
-    return
-  }
-  res.json(serializeTrip(row))
-  } catch (err) {
-    next(err)
-  }
-})
-
-tripsRouter.use(authMiddleware)
+function tripIdParam(req: Request): string {
+  const id = req.params.id
+  return Array.isArray(id) ? String(id[0] ?? '') : String(id ?? '')
+}
 
 const createSchema = z.object({
   routeId: z.string(),
@@ -119,7 +107,7 @@ const createSchema = z.object({
   note: z.string().optional(),
 })
 
-tripsRouter.post('/', async (req, res, next) => {
+tripsRouter.post('/', authMiddleware, async (req, res, next) => {
   try {
   const parsed = createSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -186,9 +174,10 @@ async function updateTripHandler(req: Request, res: Response, next: NextFunction
     }
 
     const db = getDb()
+    const tripId = tripIdParam(req)
     const existing = await db
       .prepare(`SELECT id, driver_user_id, status FROM trips WHERE id = ?`)
-      .get<{ id: string; driver_user_id: string; status: string }>(req.params.id)
+      .get<{ id: string; driver_user_id: string; status: string }>(tripId)
 
     if (!existing) {
       res.status(404).json({ error: 'E’lon topilmadi' })
@@ -227,41 +216,57 @@ async function updateTripHandler(req: Request, res: Response, next: NextFunction
         b.hasWifi ? 1 : 0,
         b.hasRoofRack ? 1 : 0,
         b.note ?? null,
-        req.params.id,
+        tripId,
         req.authUser!.id,
       )
 
     const row = await db
       .prepare(`${TRIP_SELECT_JOIN} WHERE t.id = ?`)
-      .get<TripRow>(req.params.id)
-    res.json(row ? serializeTrip(row) : { id: req.params.id })
+      .get<TripRow>(tripId)
+    res.json(row ? serializeTrip(row) : { id: tripId })
   } catch (err) {
     next(err)
   }
 }
 
-tripsRouter.patch('/:id', updateTripHandler)
-tripsRouter.put('/:id', updateTripHandler)
-
-tripsRouter.patch('/:id/close', async (req, res, next) => {
+tripsRouter.patch('/:id/close', authMiddleware, async (req, res, next) => {
   try {
   const db = getDb()
   await db.prepare(
-    `UPDATE trips SET status = 'closed', available_seats = 0 WHERE id = ? AND driver_user_id = ?`,
-  ).run(req.params.id, req.authUser!.id)
+    `UPDATE trips SET status = 'closed', available_seats = 0, completed_at = COALESCE(completed_at, NOW()) WHERE id = ? AND driver_user_id = ?`,
+  ).run(tripIdParam(req), req.authUser!.id)
   res.json({ ok: true })
   } catch (err) {
     next(err)
   }
 })
 
-tripsRouter.patch('/:id/complete', async (req, res, next) => {
+tripsRouter.patch('/:id/complete', authMiddleware, async (req, res, next) => {
   try {
   const db = getDb()
   await db.prepare(
-    `UPDATE trips SET status = 'completed', available_seats = 0 WHERE id = ? AND driver_user_id = ?`,
-  ).run(req.params.id, req.authUser!.id)
+    `UPDATE trips SET status = 'completed', available_seats = 0, completed_at = COALESCE(completed_at, NOW()) WHERE id = ? AND driver_user_id = ?`,
+  ).run(tripIdParam(req), req.authUser!.id)
   res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
+tripsRouter.patch('/:id', authMiddleware, updateTripHandler)
+
+tripsRouter.get('/:id', async (req, res, next) => {
+  try {
+  const db = getDb()
+  const row = await db
+    .prepare(`${TRIP_SELECT_JOIN} WHERE t.id = ?`)
+    .get<TripRow>(tripIdParam(req))
+
+  if (!row) {
+    res.status(404).json({ error: 'Topilmadi' })
+    return
+  }
+  res.json(serializeTrip(row))
   } catch (err) {
     next(err)
   }

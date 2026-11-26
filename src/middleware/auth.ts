@@ -30,7 +30,7 @@ export async function authMiddleware(
     const demoUserId = req.headers['x-demo-user-id']
     const db = getDb()
 
-    if (demoUserId && typeof demoUserId === 'string' && config.nodeEnv === 'development') {
+    if (demoUserId && typeof demoUserId === 'string' && config.allowDemoUser) {
       const row = await db
         .prepare(
           `SELECT id, telegram_id, role, full_name, phone, avatar_path, is_blocked FROM users WHERE id = ?`,

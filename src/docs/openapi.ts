@@ -370,16 +370,6 @@ export const openApiSpec = {
           '404': { description: 'Topilmadi' },
         },
       },
-      put: {
-        tags: ['Trips'],
-        summary: 'O‘z e’lonini tahrirlash (PUT)',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: {
-          '200': { description: 'Yangilandi' },
-          '403': { description: 'Ruxsat yo‘q' },
-          '404': { description: 'Topilmadi' },
-        },
-      },
     },
     '/trips/{id}/close': {
       patch: {

@@ -10,6 +10,8 @@ const backendRoot = path.resolve(__dirname, '..')
 export const config = {
   port: Number(process.env.PORT ?? 3001),
   nodeEnv: process.env.NODE_ENV ?? 'development',
+  /** Brauzer preview: X-Demo-User-Id (Render production ham). O‘chirish: ALLOW_DEMO_USER=false */
+  allowDemoUser: process.env.ALLOW_DEMO_USER !== 'false',
   apiPrefix: process.env.API_PREFIX ?? '/api/v1',
   botToken: process.env.BOT_TOKEN ?? '',
   corsOrigin:

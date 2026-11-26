@@ -3,11 +3,13 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/index.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { runLifecycle } from '../jobs/lifecycle.js'
 
 export const passengerRequestsRouter = Router()
 
 passengerRequestsRouter.get('/', async (_req, res, next) => {
   try {
+    await runLifecycle()
     const db = getDb()
     const rows = await db
       .prepare(
@@ -111,7 +113,7 @@ passengerRequestsRouter.post('/', async (req, res, next) => {
 })
 
 const patchSchema = z.object({
-  status: z.enum(['found', 'closed']),
+  status: z.enum(['found', 'closed', 'completed']),
 })
 
 passengerRequestsRouter.patch('/:id', async (req, res, next) => {
@@ -132,9 +134,10 @@ passengerRequestsRouter.patch('/:id', async (req, res, next) => {
       return
     }
 
+    const nextStatus = parsed.data.status === 'active' ? 'active' : 'completed'
     await db
       .prepare(`UPDATE passenger_requests SET status = ? WHERE id = ?`)
-      .run(parsed.data.status, req.params.id)
+      .run(nextStatus, req.params.id)
 
     res.json({ ok: true })
   } catch (err) {
@@ -176,6 +179,6 @@ function serializePassengerRequest(row: PassengerRequestRow) {
     createdAt: row.created_at,
     visibleFrom: row.visible_from ?? undefined,
     visibleUntil: row.visible_until ?? undefined,
-    status: row.status ?? 'active',
+    status: row.status === 'active' ? 'active' : 'completed',
   }
 }

@@ -2,9 +2,11 @@ import { createApp } from './app.js'
 import { config } from './config.js'
 import { initDb } from './db/index.js'
 import { seedDemoUser } from './db/seed.js'
+import { startLifecycleJob } from './jobs/lifecycle.js'
 
 const db = await initDb()
 await seedDemoUser(db)
+startLifecycleJob()
 
 const app = createApp()
 

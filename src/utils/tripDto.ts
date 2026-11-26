@@ -25,6 +25,7 @@ export interface TripRow {
   car_color: string | null
   plate_number: string | null
   created_at?: string
+  completed_at?: string | null
 }
 
 export const TRIP_SELECT_JOIN = `
@@ -61,6 +62,7 @@ export function serializeTrip(row: TripRow) {
     note: row.note,
     status: row.status,
     createdAt: row.created_at ?? new Date().toISOString(),
+    completedAt: row.completed_at ?? undefined,
     driver: {
       id: row.driver_user_id,
       name: row.full_name,
@@ -82,6 +84,7 @@ export interface PublishStatus {
   used: number
   remaining: number
   bonus: number
+  bonusExpiresAt: string | null
   nextAllowedAt: string | null
 }
 
@@ -90,10 +93,22 @@ export async function getPublishStatus(
     prepare: (sql: string) => {
       all: <T>(...p: unknown[]) => Promise<T[]>
       get: <T>(...p: unknown[]) => Promise<T | undefined>
+      run?: (...p: unknown[]) => Promise<unknown>
     }
   },
   driverUserId: string,
 ): Promise<PublishStatus> {
+  await db
+    .prepare(
+      `UPDATE driver_settings
+       SET publish_bonus = 0, publish_bonus_expires_at = NULL
+       WHERE user_id = ?
+         AND publish_bonus > 0
+         AND publish_bonus_expires_at IS NOT NULL
+         AND publish_bonus_expires_at < NOW()`,
+    )
+    .run?.(driverUserId)
+
   const rows = await db
     .prepare(
       `SELECT created_at FROM trips
@@ -104,11 +119,19 @@ export async function getPublishStatus(
     .all<{ created_at: string | Date }>(driverUserId)
 
   const bonusRow = await db
-    .prepare(`SELECT publish_bonus FROM driver_settings WHERE user_id = ?`)
-    .get<{ publish_bonus: number }>(driverUserId)
+    .prepare(
+      `SELECT publish_bonus, publish_bonus_expires_at FROM driver_settings WHERE user_id = ?`,
+    )
+    .get<{ publish_bonus: number; publish_bonus_expires_at: string | Date | null }>(
+      driverUserId,
+    )
 
   const used = rows.length
-  const bonus = Math.max(0, Number(bonusRow?.publish_bonus ?? 0))
+  const expiresAt = bonusRow?.publish_bonus_expires_at
+    ? new Date(bonusRow.publish_bonus_expires_at)
+    : null
+  const bonusActive = Boolean(expiresAt && expiresAt.getTime() > Date.now())
+  const bonus = bonusActive ? Math.max(0, Number(bonusRow?.publish_bonus ?? 0)) : 0
   const limit = PUBLISH_LIMIT_PER_WINDOW
   const remaining = Math.max(0, limit - used) + bonus
   const allowed = remaining > 0
@@ -119,5 +142,13 @@ export async function getPublishStatus(
     nextAllowedAt = new Date(oldest + PUBLISH_WINDOW_MS).toISOString()
   }
 
-  return { allowed, limit, used, remaining, bonus, nextAllowedAt }
+  return {
+    allowed,
+    limit,
+    used,
+    remaining,
+    bonus,
+    bonusExpiresAt: bonus > 0 && expiresAt ? expiresAt.toISOString() : null,
+    nextAllowedAt,
+  }
 }

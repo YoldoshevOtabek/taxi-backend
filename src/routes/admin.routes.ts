@@ -94,7 +94,7 @@ adminRouter.get('/users', async (req, res, next) => {
     let sql = `
       SELECT u.id, u.telegram_id, u.role, u.full_name, u.phone, u.avatar_path,
              u.is_blocked, u.created_at, u.updated_at,
-             ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus,
+             ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus, ds.publish_bonus_expires_at,
              (SELECT COUNT(*)::int FROM trips t
               WHERE t.driver_user_id = u.id
                 AND t.created_at > NOW() - INTERVAL '24 hours') AS trips_24h
@@ -132,7 +132,7 @@ adminRouter.get('/users/:id', async (req, res, next) => {
       .prepare(
         `SELECT u.id, u.telegram_id, u.role, u.full_name, u.phone, u.avatar_path,
                 u.is_blocked, u.created_at, u.updated_at,
-                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus,
+                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus, ds.publish_bonus_expires_at,
                 (SELECT COUNT(*)::int FROM trips t
                  WHERE t.driver_user_id = u.id
                    AND t.created_at > NOW() - INTERVAL '24 hours') AS trips_24h
@@ -274,7 +274,7 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
       .prepare(
         `SELECT u.id, u.telegram_id, u.role, u.full_name, u.phone, u.avatar_path,
                 u.is_blocked, u.created_at, u.updated_at,
-                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus,
+                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus, ds.publish_bonus_expires_at,
                 (SELECT COUNT(*)::int FROM trips t
                  WHERE t.driver_user_id = u.id
                    AND t.created_at > NOW() - INTERVAL '24 hours') AS trips_24h
@@ -391,6 +391,9 @@ adminRouter.patch('/trips/:id', async (req, res, next) => {
     if (d.status) {
       sets.push(`status = ?`)
       vals.push(d.status)
+      if (d.status === 'completed' || d.status === 'closed') {
+        sets.push(`completed_at = COALESCE(completed_at, NOW())`)
+      }
     }
     if (d.availableSeats !== undefined) {
       sets.push(`available_seats = ?`)
@@ -505,6 +508,7 @@ interface AdminUserRow {
   driver_mode_enabled: number | null
   can_publish: boolean | null
   publish_bonus: number | null
+  publish_bonus_expires_at: string | Date | null
   trips_24h: number
 }
 
@@ -533,7 +537,11 @@ function serializeAdminUser(row: AdminUserRow) {
     row.role === 'driver' ||
     Boolean(row.car_model || row.car_color || row.plate_number)
   const used = Number(row.trips_24h ?? 0)
-  const bonus = Math.max(0, Number(row.publish_bonus ?? 0))
+  const bonusExpires = row.publish_bonus_expires_at
+    ? new Date(row.publish_bonus_expires_at).getTime()
+    : 0
+  const bonus =
+    bonusExpires > Date.now() ? Math.max(0, Number(row.publish_bonus ?? 0)) : 0
   const canPublish = row.can_publish == null ? true : Boolean(row.can_publish)
   const remaining = Math.max(0, PUBLISH_LIMIT_PER_WINDOW - used) + bonus
 
@@ -554,6 +562,10 @@ function serializeAdminUser(row: AdminUserRow) {
       bonus,
       remaining,
       allowed: remaining > 0 && canPublish,
+      bonusExpiresAt:
+        bonus > 0 && row.publish_bonus_expires_at
+          ? new Date(row.publish_bonus_expires_at).toISOString()
+          : null,
     },
     driver: hasDriver
       ? {
