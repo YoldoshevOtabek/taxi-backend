@@ -15,6 +15,7 @@ export interface TripRow {
   has_ac: number
   has_trunk: number
   has_wifi: number
+  has_roof_rack?: number
   note: string | null
   status: string
   full_name: string
@@ -47,15 +48,16 @@ export function serializeTrip(row: TripRow) {
     departureDate: row.departure_date,
     departureTime: row.departure_time,
     pickupAddress: row.pickup_address,
-    availableSeats: row.available_seats,
-    totalSeats: row.total_seats,
-    pricePerSeat: row.price_per_seat,
+    availableSeats: Number(row.available_seats) || 0,
+    totalSeats: Number(row.total_seats) || 4,
+    pricePerSeat: Number(row.price_per_seat) || 0,
     carModel,
     carColor,
     plateNumber,
     hasAirConditioner: Boolean(row.has_ac),
     hasLargeTrunk: Boolean(row.has_trunk),
     hasWifi: Boolean(row.has_wifi),
+    hasRoofRack: Boolean(row.has_roof_rack),
     note: row.note,
     status: row.status,
     createdAt: row.created_at ?? new Date().toISOString(),
@@ -79,6 +81,7 @@ export interface PublishStatus {
   limit: number
   used: number
   remaining: number
+  bonus: number
   nextAllowedAt: string | null
 }
 
@@ -86,6 +89,7 @@ export async function getPublishStatus(
   db: {
     prepare: (sql: string) => {
       all: <T>(...p: unknown[]) => Promise<T[]>
+      get: <T>(...p: unknown[]) => Promise<T | undefined>
     }
   },
   driverUserId: string,
@@ -99,10 +103,15 @@ export async function getPublishStatus(
     )
     .all<{ created_at: string | Date }>(driverUserId)
 
+  const bonusRow = await db
+    .prepare(`SELECT publish_bonus FROM driver_settings WHERE user_id = ?`)
+    .get<{ publish_bonus: number }>(driverUserId)
+
   const used = rows.length
+  const bonus = Math.max(0, Number(bonusRow?.publish_bonus ?? 0))
   const limit = PUBLISH_LIMIT_PER_WINDOW
-  const remaining = Math.max(0, limit - used)
-  const allowed = used < limit
+  const remaining = Math.max(0, limit - used) + bonus
+  const allowed = remaining > 0
 
   let nextAllowedAt: string | null = null
   if (!allowed && rows[0]?.created_at) {
@@ -110,5 +119,5 @@ export async function getPublishStatus(
     nextAllowedAt = new Date(oldest + PUBLISH_WINDOW_MS).toISOString()
   }
 
-  return { allowed, limit, used, remaining, nextAllowedAt }
+  return { allowed, limit, used, remaining, bonus, nextAllowedAt }
 }

@@ -3,7 +3,7 @@ import { config } from '../config.js'
 export const openApiSpec = {
   openapi: '3.0.3',
   info: {
-    title: "YO'L API",
+    title: 'HamrohTaxi API',
     version: '1.0.0',
     description:
       'Telegram Mini App backend: autentifikatsiya, profil (ism + avatar), safarlar, yo‘lovchi talablari.\n\n' +
@@ -75,6 +75,7 @@ export const openApiSpec = {
           pricePerSeat: { type: 'number' },
           hasAirConditioner: { type: 'boolean' },
           hasLargeTrunk: { type: 'boolean' },
+          hasRoofRack: { type: 'boolean' },
           hasWifi: { type: 'boolean' },
           note: { type: 'string', nullable: true },
           status: { type: 'string' },
@@ -337,6 +338,7 @@ export const openApiSpec = {
                   pricePerSeat: { type: 'number' },
                   hasAirConditioner: { type: 'boolean' },
                   hasLargeTrunk: { type: 'boolean' },
+          hasRoofRack: { type: 'boolean' },
                   hasWifi: { type: 'boolean' },
                   note: { type: 'string' },
                 },
@@ -355,6 +357,26 @@ export const openApiSpec = {
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: {
           '200': { description: 'Trip' },
+          '404': { description: 'Topilmadi' },
+        },
+      },
+      patch: {
+        tags: ['Trips'],
+        summary: 'O‘z e’lonini tahrirlash',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          '200': { description: 'Yangilandi' },
+          '403': { description: 'Ruxsat yo‘q' },
+          '404': { description: 'Topilmadi' },
+        },
+      },
+      put: {
+        tags: ['Trips'],
+        summary: 'O‘z e’lonini tahrirlash (PUT)',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          '200': { description: 'Yangilandi' },
+          '403': { description: 'Ruxsat yo‘q' },
           '404': { description: 'Topilmadi' },
         },
       },
@@ -398,6 +420,7 @@ export const openApiSpec = {
                   'passengerCount',
                   'preferredTime',
                   'offeredPrice',
+                  'visibleUntil',
                 ],
                 properties: {
                   routeId: { type: 'string' },
@@ -409,12 +432,29 @@ export const openApiSpec = {
                   offeredPrice: { type: 'number' },
                   phone: { type: 'string' },
                   note: { type: 'string' },
+                  visibleFrom: { type: 'string' },
+                  visibleUntil: { type: 'string' },
                 },
               },
             },
           },
         },
         responses: { '201': { description: 'Yaratildi' } },
+      },
+    },
+    '/passenger-requests/mine': {
+      get: {
+        tags: ['Passenger requests'],
+        summary: 'Mening talablarim',
+        responses: { '200': { description: 'Ro‘yxat' } },
+      },
+    },
+    '/passenger-requests/{id}': {
+      patch: {
+        tags: ['Passenger requests'],
+        summary: 'Talab holatini yangilash (found / closed)',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'OK' } },
       },
     },
   },

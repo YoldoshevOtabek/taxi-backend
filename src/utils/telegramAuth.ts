@@ -42,7 +42,12 @@ export function validateInitData(initData: string): {
     .update(dataCheckString)
     .digest('hex')
 
-  if (calculated !== hash) return { valid: false }
+  if (calculated !== hash) {
+    if (config.nodeEnv === 'development') {
+      return parseInitDataUnsafe(initData)
+    }
+    return { valid: false }
+  }
 
   return parseInitDataUnsafe(initData)
 }

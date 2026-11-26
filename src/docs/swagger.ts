@@ -16,7 +16,7 @@ export function mountSwagger(app: Express): void {
     swaggerPath,
     swaggerUi.serve,
     swaggerUi.setup(spec, {
-      customSiteTitle: "YO'L API — Swagger",
+      customSiteTitle: 'HamrohTaxi API — Swagger',
       swaggerOptions: {
         persistAuthorization: true,
         displayRequestDuration: true,

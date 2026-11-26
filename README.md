@@ -1,4 +1,4 @@
-# YO'L Backend (Node.js + Express)
+# HamrohTaxi Backend (Node.js + Express)
 
 Telegram Mini App uchun REST API: autentifikatsiya, profil (ism + rasm yuklash), safarlar, yo‘lovchi talablari.
 

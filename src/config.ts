@@ -12,7 +12,8 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   apiPrefix: process.env.API_PREFIX ?? '/api/v1',
   botToken: process.env.BOT_TOKEN ?? '',
-  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  corsOrigin:
+    process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:5174',
   databaseUrl: process.env.DATABASE_URL ?? '',
   databaseUrlUnpooled:
     process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? '',
@@ -26,6 +27,12 @@ export const config = {
   ),
   publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:3001',
   adminUsername: process.env.ADMIN_USERNAME ?? 'Otabek',
-  adminPassword: process.env.ADMIN_PASSWORD ?? '',
-  adminApiToken: process.env.ADMIN_API_TOKEN ?? '',
+  adminPassword:
+    process.env.ADMIN_PASSWORD ??
+    ((process.env.NODE_ENV ?? 'development') === 'development' ? 'bek2506' : ''),
+  adminApiToken:
+    process.env.ADMIN_API_TOKEN ??
+    ((process.env.NODE_ENV ?? 'development') === 'development'
+      ? 'yol-admin-local-token'
+      : ''),
 }

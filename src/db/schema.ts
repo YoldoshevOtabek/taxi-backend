@@ -35,6 +35,7 @@ const INIT_SQL = `
     has_ac INTEGER NOT NULL DEFAULT 1,
     has_trunk INTEGER NOT NULL DEFAULT 1,
     has_wifi INTEGER NOT NULL DEFAULT 0,
+    has_roof_rack INTEGER NOT NULL DEFAULT 0,
     note TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -65,6 +66,12 @@ const INIT_SQL = `
 
 const PATCH_SQL = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
+  ALTER TABLE driver_settings ADD COLUMN IF NOT EXISTS can_publish BOOLEAN NOT NULL DEFAULT TRUE;
+  ALTER TABLE driver_settings ADD COLUMN IF NOT EXISTS publish_bonus INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE trips ADD COLUMN IF NOT EXISTS has_roof_rack INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE passenger_requests ADD COLUMN IF NOT EXISTS visible_from TIMESTAMPTZ;
+  ALTER TABLE passenger_requests ADD COLUMN IF NOT EXISTS visible_until TIMESTAMPTZ;
+  ALTER TABLE passenger_requests ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 `
 
 export async function migrate(db: SqlClient): Promise<void> {

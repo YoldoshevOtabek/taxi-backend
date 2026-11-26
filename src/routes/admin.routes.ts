@@ -4,7 +4,19 @@ import { config } from '../config.js'
 import { getDb } from '../db/index.js'
 import { adminAuthMiddleware } from '../middleware/adminAuth.js'
 import { publicAvatarUrl } from '../middleware/auth.js'
-import { TRIP_SELECT_JOIN, serializeTrip, type TripRow } from '../utils/tripDto.js'
+import {
+  PUBLISH_LIMIT_PER_WINDOW,
+  TRIP_SELECT_JOIN,
+  serializeTrip,
+  type TripRow,
+} from '../utils/tripDto.js'
+import {
+  deleteTripById,
+  deleteUserCascade,
+  grantPublishBonus,
+  resetPublishWindow,
+  userPublishSummary,
+} from '../utils/adminUser.js'
 
 export const adminRouter = Router()
 
@@ -82,7 +94,10 @@ adminRouter.get('/users', async (req, res, next) => {
     let sql = `
       SELECT u.id, u.telegram_id, u.role, u.full_name, u.phone, u.avatar_path,
              u.is_blocked, u.created_at, u.updated_at,
-             ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled
+             ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus,
+             (SELECT COUNT(*)::int FROM trips t
+              WHERE t.driver_user_id = u.id
+                AND t.created_at > NOW() - INTERVAL '24 hours') AS trips_24h
       FROM users u
       LEFT JOIN driver_settings ds ON ds.user_id = u.id
       WHERE u.role IS NOT NULL AND u.role IN ('driver', 'passenger')
@@ -117,7 +132,10 @@ adminRouter.get('/users/:id', async (req, res, next) => {
       .prepare(
         `SELECT u.id, u.telegram_id, u.role, u.full_name, u.phone, u.avatar_path,
                 u.is_blocked, u.created_at, u.updated_at,
-                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled
+                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus,
+                (SELECT COUNT(*)::int FROM trips t
+                 WHERE t.driver_user_id = u.id
+                   AND t.created_at > NOW() - INTERVAL '24 hours') AS trips_24h
          FROM users u
          LEFT JOIN driver_settings ds ON ds.user_id = u.id
          WHERE u.id = ?`,
@@ -135,10 +153,12 @@ adminRouter.get('/users/:id', async (req, res, next) => {
     const requestCount = await db
       .prepare(`SELECT COUNT(*)::int AS c FROM passenger_requests WHERE user_id = ?`)
       .get<{ c: number }>(req.params.id)
+    const publish = await userPublishSummary(db, req.params.id)
 
     res.json({
       user: serializeAdminUser(row),
       stats: { tripCount: tripCount?.c ?? 0, requestCount: requestCount?.c ?? 0 },
+      publish,
     })
   } catch (err) {
     next(err)
@@ -154,6 +174,7 @@ const patchUserSchema = z.object({
   carColor: z.string().max(40).optional(),
   plateNumber: z.string().max(20).optional(),
   driverModeEnabled: z.boolean().optional(),
+  canPublish: z.boolean().optional(),
 })
 
 adminRouter.patch('/users/:id', async (req, res, next) => {
@@ -205,24 +226,47 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
       d.carModel !== undefined ||
       d.carColor !== undefined ||
       d.plateNumber !== undefined ||
-      d.driverModeEnabled !== undefined
+      d.driverModeEnabled !== undefined ||
+      d.canPublish !== undefined
     ) {
+      const existing = await db
+        .prepare(
+          `SELECT car_model, car_color, plate_number, driver_mode_enabled, can_publish
+         FROM driver_settings WHERE user_id = ?`,
+        )
+        .get<{
+          car_model: string
+          car_color: string
+          plate_number: string
+          driver_mode_enabled: number
+          can_publish: boolean
+        }>(userId)
+
       await db
         .prepare(
-          `INSERT INTO driver_settings (user_id, car_model, car_color, plate_number, driver_mode_enabled)
-         VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO driver_settings (
+            user_id, car_model, car_color, plate_number, driver_mode_enabled, can_publish
+          ) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (user_id) DO UPDATE SET
            car_model = COALESCE(EXCLUDED.car_model, driver_settings.car_model),
            car_color = COALESCE(EXCLUDED.car_color, driver_settings.car_color),
            plate_number = COALESCE(EXCLUDED.plate_number, driver_settings.plate_number),
-           driver_mode_enabled = COALESCE(EXCLUDED.driver_mode_enabled, driver_settings.driver_mode_enabled)`,
+           driver_mode_enabled = COALESCE(EXCLUDED.driver_mode_enabled, driver_settings.driver_mode_enabled),
+           can_publish = COALESCE(EXCLUDED.can_publish, driver_settings.can_publish)`,
         )
         .run(
           userId,
-          d.carModel ?? '',
-          d.carColor ?? '',
-          d.plateNumber ?? '',
-          d.driverModeEnabled === undefined ? 1 : d.driverModeEnabled ? 1 : 0,
+          d.carModel ?? existing?.car_model ?? '',
+          d.carColor ?? existing?.car_color ?? '',
+          d.plateNumber ?? existing?.plate_number ?? '',
+          d.driverModeEnabled === undefined
+            ? (existing?.driver_mode_enabled ?? 1)
+            : d.driverModeEnabled
+              ? 1
+              : 0,
+          d.canPublish === undefined
+            ? (existing?.can_publish ?? true)
+            : d.canPublish,
         )
     }
 
@@ -230,7 +274,10 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
       .prepare(
         `SELECT u.id, u.telegram_id, u.role, u.full_name, u.phone, u.avatar_path,
                 u.is_blocked, u.created_at, u.updated_at,
-                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled
+                ds.car_model, ds.car_color, ds.plate_number, ds.driver_mode_enabled, ds.can_publish, ds.publish_bonus,
+                (SELECT COUNT(*)::int FROM trips t
+                 WHERE t.driver_user_id = u.id
+                   AND t.created_at > NOW() - INTERVAL '24 hours') AS trips_24h
          FROM users u
          LEFT JOIN driver_settings ds ON ds.user_id = u.id
          WHERE u.id = ?`,
@@ -246,8 +293,54 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
 adminRouter.delete('/users/:id', async (req, res, next) => {
   try {
     const db = getDb()
-    await db.prepare(`DELETE FROM users WHERE id = ?`).run(req.params.id)
+    const exists = await db
+      .prepare(`SELECT id FROM users WHERE id = ?`)
+      .get<{ id: string }>(req.params.id)
+    if (!exists) {
+      res.status(404).json({ error: 'Foydalanuvchi topilmadi' })
+      return
+    }
+    await deleteUserCascade(db, req.params.id)
     res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
+adminRouter.post('/users/:id/grant-publish-bonus', async (req, res, next) => {
+  try {
+    const db = getDb()
+    const exists = await db
+      .prepare(`SELECT id, role FROM users WHERE id = ?`)
+      .get<{ id: string; role: string | null }>(req.params.id)
+    if (!exists) {
+      res.status(404).json({ error: 'Foydalanuvchi topilmadi' })
+      return
+    }
+    const bonus = await grantPublishBonus(db, req.params.id, 1)
+    const publish = await userPublishSummary(db, req.params.id)
+    res.json({ ok: true, bonus, publish })
+  } catch (err) {
+    next(err)
+  }
+})
+
+adminRouter.post('/users/:id/reset-publish', async (req, res, next) => {
+  try {
+    const db = getDb()
+    const removed = await resetPublishWindow(db, req.params.id)
+  const publish = await userPublishSummary(db, req.params.id)
+    res.json({ ok: true, removedTrips: removed, publish })
+  } catch (err) {
+    next(err)
+  }
+})
+
+adminRouter.get('/users/:id/publish-status', async (req, res, next) => {
+  try {
+    const db = getDb()
+    const publish = await userPublishSummary(db, req.params.id)
+    res.json(publish)
   } catch (err) {
     next(err)
   }
@@ -326,6 +419,23 @@ adminRouter.patch('/trips/:id', async (req, res, next) => {
   }
 })
 
+adminRouter.delete('/trips/:id', async (req, res, next) => {
+  try {
+    const db = getDb()
+    const row = await db
+      .prepare(`SELECT id FROM trips WHERE id = ?`)
+      .get<{ id: string }>(req.params.id)
+    if (!row) {
+      res.status(404).json({ error: 'E’lon topilmadi' })
+      return
+    }
+    await deleteTripById(db, req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
 adminRouter.get('/passenger-requests', async (req, res, next) => {
   try {
     const limit = Math.min(Number(req.query.limit ?? 50) || 50, 200)
@@ -357,6 +467,9 @@ adminRouter.get('/passenger-requests', async (req, res, next) => {
         phone: r.phone,
         note: r.note,
         createdAt: r.created_at,
+        visibleFrom: r.visible_from,
+        visibleUntil: r.visible_until,
+        status: r.status ?? 'active',
       })),
       limit,
       offset,
@@ -390,6 +503,9 @@ interface AdminUserRow {
   car_color: string | null
   plate_number: string | null
   driver_mode_enabled: number | null
+  can_publish: boolean | null
+  publish_bonus: number | null
+  trips_24h: number
 }
 
 interface PassengerRequestAdminRow {
@@ -405,6 +521,9 @@ interface PassengerRequestAdminRow {
   phone: string
   note: string | null
   created_at: string
+  visible_from: string | null
+  visible_until: string | null
+  status: string | null
   user_full_name: string
   user_role: string | null
 }
@@ -413,6 +532,10 @@ function serializeAdminUser(row: AdminUserRow) {
   const hasDriver =
     row.role === 'driver' ||
     Boolean(row.car_model || row.car_color || row.plate_number)
+  const used = Number(row.trips_24h ?? 0)
+  const bonus = Math.max(0, Number(row.publish_bonus ?? 0))
+  const canPublish = row.can_publish == null ? true : Boolean(row.can_publish)
+  const remaining = Math.max(0, PUBLISH_LIMIT_PER_WINDOW - used) + bonus
 
   return {
     id: row.id,
@@ -424,12 +547,21 @@ function serializeAdminUser(row: AdminUserRow) {
     isBlocked: Boolean(row.is_blocked),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    canPublish,
+    publishWindow: {
+      used,
+      limit: PUBLISH_LIMIT_PER_WINDOW,
+      bonus,
+      remaining,
+      allowed: remaining > 0 && canPublish,
+    },
     driver: hasDriver
       ? {
           carModel: row.car_model ?? '',
           carColor: row.car_color ?? '',
           plateNumber: row.plate_number ?? '',
           driverModeEnabled: Boolean(Number(row.driver_mode_enabled ?? 1)),
+          canPublish,
         }
       : null,
   }
