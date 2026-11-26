@@ -10,6 +10,7 @@ import { tripsRouter } from './routes/trips.routes.js'
 import { passengerRequestsRouter } from './routes/passengerRequests.routes.js'
 import { favoritesRouter } from './routes/favorites.routes.js'
 import { adminRouter } from './routes/admin.routes.js'
+import { feedbackRouter } from './routes/feedback.routes.js'
 import { apiIndexBody, mountSwagger, swaggerPath } from './docs/swagger.js'
 import { pingDb } from './db/index.js'
 
@@ -24,9 +25,34 @@ export function createApp() {
       contentSecurityPolicy: false,
     }),
   )
+  const corsAllow = new Set(
+    config.corsOrigin
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .concat([
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
+        'http://127.0.0.1:5175',
+      ]),
+  )
+
   app.use(
     cors({
-      origin: config.corsOrigin.split(',').map((s) => s.trim()),
+      origin(origin, cb) {
+        if (!origin) {
+          cb(null, true)
+          return
+        }
+        if (corsAllow.has(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          cb(null, true)
+          return
+        }
+        cb(null, false)
+      },
       credentials: true,
     }),
   )
@@ -66,6 +92,7 @@ export function createApp() {
   api.use('/trips', tripsRouter)
   api.use('/passenger-requests', passengerRequestsRouter)
   api.use('/favorites', favoritesRouter)
+  api.use('/feedback', feedbackRouter)
   api.use('/admin', adminRouter)
 
   app.use(config.apiPrefix, api)

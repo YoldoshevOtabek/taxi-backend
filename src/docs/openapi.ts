@@ -18,6 +18,7 @@ export const openApiSpec = {
     { name: 'Profile' },
     { name: 'Trips' },
     { name: 'Passenger requests' },
+    { name: 'Feedback' },
   ],
   components: {
     securitySchemes: {
@@ -437,6 +438,27 @@ export const openApiSpec = {
         tags: ['Passenger requests'],
         summary: 'Mening talablarim',
         responses: { '200': { description: 'Ro‘yxat' } },
+      },
+    },
+    '/feedback': {
+      post: {
+        tags: ['Feedback'],
+        summary: 'Talab yoki taklif yuborish (faqat admin ko‘radi)',
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['kind', 'message'],
+                properties: {
+                  kind: { type: 'string', enum: ['talab', 'taklif'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '201': { description: 'Yaratildi' } },
       },
     },
     '/passenger-requests/{id}': {

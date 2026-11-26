@@ -15,6 +15,7 @@ export async function deleteUserCascade(db: SqlClient, userId: string): Promise<
   }
   await db.prepare(`DELETE FROM favorites WHERE user_id = ?`).run(userId)
   await db.prepare(`DELETE FROM passenger_requests WHERE user_id = ?`).run(userId)
+  await db.prepare(`DELETE FROM feedback WHERE user_id = ?`).run(userId)
   await db.prepare(`DELETE FROM users WHERE id = ?`).run(userId)
 }
 

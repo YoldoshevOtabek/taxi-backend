@@ -42,6 +42,7 @@ export function apiIndexBody() {
       publishStatus: `${base}/trips/publish-status`,
       passengerRequests: `${base}/passenger-requests`,
       favorites: `${base}/favorites`,
+      feedback: `${base}/feedback`,
       admin: `${base}/admin`,
       adminLogin: `${base}/admin/login`,
       authTelegram: `${base}/auth/telegram`,

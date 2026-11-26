@@ -56,7 +56,7 @@ adminRouter.use(adminAuthMiddleware)
 adminRouter.get('/overview', async (_req, res, next) => {
   try {
     const db = getDb()
-    const [drivers, passengers, tripsActive, requests] = await Promise.all([
+    const [drivers, passengers, tripsActive, requests, feedback] = await Promise.all([
       db
         .prepare(`SELECT COUNT(*)::int AS c FROM users WHERE role = 'driver'`)
         .get<{ c: number }>(),
@@ -69,6 +69,7 @@ adminRouter.get('/overview', async (_req, res, next) => {
       db
         .prepare(`SELECT COUNT(*)::int AS c FROM passenger_requests`)
         .get<{ c: number }>(),
+      db.prepare(`SELECT COUNT(*)::int AS c FROM feedback`).get<{ c: number }>(),
     ])
 
     res.json({
@@ -78,6 +79,7 @@ adminRouter.get('/overview', async (_req, res, next) => {
       },
       tripsActive: tripsActive?.c ?? 0,
       passengerRequests: requests?.c ?? 0,
+      feedback: feedback?.c ?? 0,
     })
   } catch (err) {
     next(err)
@@ -482,6 +484,90 @@ adminRouter.get('/passenger-requests', async (req, res, next) => {
   }
 })
 
+adminRouter.get('/feedback', async (req, res, next) => {
+  try {
+    const kind = req.query.kind as string | undefined
+    const status = req.query.status as string | undefined
+    const limit = Math.min(Number(req.query.limit ?? 100) || 100, 200)
+    const offset = Math.max(Number(req.query.offset ?? 0) || 0, 0)
+
+    let sql = `
+      SELECT f.id, f.user_id, f.kind, f.message, f.status, f.created_at,
+             u.full_name AS user_full_name, u.role AS user_role, u.phone AS user_phone
+      FROM feedback f
+      JOIN users u ON u.id = f.user_id
+      WHERE 1=1
+    `
+    const params: unknown[] = []
+    if (kind === 'talab' || kind === 'taklif') {
+      sql += ` AND f.kind = ?`
+      params.push(kind)
+    }
+    if (status === 'new' || status === 'read' || status === 'done') {
+      sql += ` AND f.status = ?`
+      params.push(status)
+    }
+    sql += ` ORDER BY f.created_at DESC LIMIT ? OFFSET ?`
+    params.push(limit, offset)
+
+    const db = getDb()
+    const rows = await db.prepare(sql).all<FeedbackAdminRow>(...params)
+    res.json({
+      items: rows.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        userFullName: r.user_full_name,
+        userRole: r.user_role,
+        userPhone: r.user_phone,
+        kind: r.kind,
+        message: r.message,
+        status: r.status,
+        createdAt: r.created_at,
+      })),
+      limit,
+      offset,
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+adminRouter.patch('/feedback/:id', async (req, res, next) => {
+  try {
+    const body = z
+      .object({ status: z.enum(['new', 'read', 'done']) })
+      .safeParse(req.body)
+    if (!body.success) {
+      res.status(400).json({ error: 'Holat noto‘g‘ri' })
+      return
+    }
+    const db = getDb()
+    const existing = await db
+      .prepare(`SELECT id FROM feedback WHERE id = ?`)
+      .get<{ id: string }>(req.params.id)
+    if (!existing) {
+      res.status(404).json({ error: 'Yozuv topilmadi' })
+      return
+    }
+    await db
+      .prepare(`UPDATE feedback SET status = ? WHERE id = ?`)
+      .run(body.data.status, req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
+adminRouter.delete('/feedback/:id', async (req, res, next) => {
+  try {
+    const db = getDb()
+    await db.prepare(`DELETE FROM feedback WHERE id = ?`).run(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
 adminRouter.delete('/passenger-requests/:id', async (req, res, next) => {
   try {
     const db = getDb()
@@ -510,6 +596,18 @@ interface AdminUserRow {
   publish_bonus: number | null
   publish_bonus_expires_at: string | Date | null
   trips_24h: number
+}
+
+interface FeedbackAdminRow {
+  id: string
+  user_id: string
+  kind: string
+  message: string
+  status: string
+  created_at: string
+  user_full_name: string
+  user_role: string | null
+  user_phone: string | null
 }
 
 interface PassengerRequestAdminRow {

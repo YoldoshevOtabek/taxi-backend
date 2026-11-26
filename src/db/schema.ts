@@ -62,6 +62,15 @@ const INIT_SQL = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, trip_id)
   );
+
+  CREATE TABLE IF NOT EXISTS feedback (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('talab', 'taklif')),
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'read', 'done')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 `
 
 const PATCH_SQL = `
