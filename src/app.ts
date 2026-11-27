@@ -37,8 +37,12 @@ export function createApp() {
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
         'http://127.0.0.1:5175',
+        'https://hamroh-taxi-eight.vercel.app',
       ]),
   )
+
+  const vercelPreview =
+    /^https:\/\/hamroh-taxi-eight(-[a-z0-9-]+)?\.vercel\.app$/i
 
   app.use(
     cors({
@@ -47,7 +51,11 @@ export function createApp() {
           cb(null, true)
           return
         }
-        if (corsAllow.has(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        if (
+          corsAllow.has(origin) ||
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+          vercelPreview.test(origin)
+        ) {
           cb(null, true)
           return
         }

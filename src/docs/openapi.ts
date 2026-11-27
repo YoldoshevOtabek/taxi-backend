@@ -336,6 +336,7 @@ export const openApiSpec = {
                   departureTime: { type: 'string' },
                   pickupAddress: { type: 'string' },
                   availableSeats: { type: 'integer' },
+                  totalSeats: { type: 'integer', enum: [4, 6] },
                   pricePerSeat: { type: 'number' },
                   hasAirConditioner: { type: 'boolean' },
                   hasLargeTrunk: { type: 'boolean' },

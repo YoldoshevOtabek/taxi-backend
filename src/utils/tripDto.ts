@@ -50,7 +50,7 @@ export function serializeTrip(row: TripRow) {
     departureTime: row.departure_time,
     pickupAddress: row.pickup_address,
     availableSeats: Number(row.available_seats) || 0,
-    totalSeats: Number(row.total_seats) || 4,
+    totalSeats: Number(row.total_seats) === 6 || Number(row.available_seats) > 4 ? 6 : 4,
     pricePerSeat: Number(row.price_per_seat) || 0,
     carModel,
     carColor,

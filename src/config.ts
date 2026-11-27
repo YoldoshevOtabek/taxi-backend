@@ -15,7 +15,8 @@ export const config = {
   apiPrefix: process.env.API_PREFIX ?? '/api/v1',
   botToken: process.env.BOT_TOKEN ?? '',
   corsOrigin:
-    process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:5174',
+    process.env.CORS_ORIGIN ??
+    'http://localhost:5173,http://localhost:5174,https://hamroh-taxi-eight.vercel.app',
   databaseUrl: process.env.DATABASE_URL ?? '',
   databaseUrlUnpooled:
     process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? '',

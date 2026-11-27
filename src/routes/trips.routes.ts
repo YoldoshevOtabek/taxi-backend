@@ -91,6 +91,12 @@ function tripIdParam(req: Request): string {
   return Array.isArray(id) ? String(id[0] ?? '') : String(id ?? '')
 }
 
+function resolveCapacity(total: unknown, available: number): 4 | 6 {
+  const n = Number(total)
+  if (n === 6 || available > 4) return 6
+  return 4
+}
+
 const createSchema = z.object({
   routeId: z.string(),
   from: z.string(),
@@ -98,8 +104,13 @@ const createSchema = z.object({
   departureDate: z.string(),
   departureTime: z.string(),
   pickupAddress: z.string(),
-  availableSeats: z.number().int().min(1).max(4),
-  pricePerSeat: z.number().positive(),
+  totalSeats: z.coerce.number().optional(),
+    availableSeats: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(6, 'Maksimum 6 ta yo‘lovchi (6 kishilik mashina)'),
+  pricePerSeat: z.coerce.number().positive(),
   hasAirConditioner: z.boolean().optional(),
   hasLargeTrunk: z.boolean().optional(),
   hasWifi: z.boolean().optional(),
@@ -131,14 +142,17 @@ tripsRouter.post('/', authMiddleware, async (req, res, next) => {
   const usedBeforeCreate = publishStatus.used
 
   const id = `trip-${crypto.randomUUID()}`
-  const b = parsed.data
+  const b = {
+    ...parsed.data,
+    totalSeats: resolveCapacity(parsed.data.totalSeats, parsed.data.availableSeats),
+  }
 
   await db.prepare(
     `INSERT INTO trips (
       id, driver_user_id, route_id, from_city, to_city,
       departure_date, departure_time, pickup_address,
-      available_seats, price_per_seat, has_ac, has_trunk, has_wifi, has_roof_rack, note
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      available_seats, total_seats, price_per_seat, has_ac, has_trunk, has_wifi, has_roof_rack, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     req.authUser!.id,
@@ -149,6 +163,7 @@ tripsRouter.post('/', authMiddleware, async (req, res, next) => {
     b.departureTime,
     b.pickupAddress,
     b.availableSeats,
+    b.totalSeats,
     b.pricePerSeat,
     b.hasAirConditioner ? 1 : 0,
     b.hasLargeTrunk ? 1 : 0,
@@ -159,7 +174,8 @@ tripsRouter.post('/', authMiddleware, async (req, res, next) => {
 
   await consumePublishBonusIfNeeded(db, req.authUser!.id, usedBeforeCreate)
 
-  res.status(201).json({ id })
+  const created = await db.prepare(`${TRIP_SELECT_JOIN} WHERE t.id = ?`).get<TripRow>(id)
+  res.status(201).json(created ? serializeTrip(created) : { id })
   } catch (err) {
     next(err)
   }
@@ -192,13 +208,16 @@ async function updateTripHandler(req: Request, res: Response, next: NextFunction
       return
     }
 
-    const b = parsed.data
+    const b = {
+      ...parsed.data,
+      totalSeats: resolveCapacity(parsed.data.totalSeats, parsed.data.availableSeats),
+    }
     await db
       .prepare(
         `UPDATE trips SET
           route_id = ?, from_city = ?, to_city = ?,
           departure_date = ?, departure_time = ?, pickup_address = ?,
-          available_seats = ?, price_per_seat = ?,
+          available_seats = ?, total_seats = ?, price_per_seat = ?,
           has_ac = ?, has_trunk = ?, has_wifi = ?, has_roof_rack = ?, note = ?
          WHERE id = ? AND driver_user_id = ?`,
       )
@@ -210,6 +229,7 @@ async function updateTripHandler(req: Request, res: Response, next: NextFunction
         b.departureTime,
         b.pickupAddress,
         b.availableSeats,
+        b.totalSeats,
         b.pricePerSeat,
         b.hasAirConditioner ? 1 : 0,
         b.hasLargeTrunk ? 1 : 0,

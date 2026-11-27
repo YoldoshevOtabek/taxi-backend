@@ -374,7 +374,7 @@ adminRouter.get('/trips', async (req, res, next) => {
 
 const patchTripSchema = z.object({
   status: z.enum(['active', 'closed', 'completed']).optional(),
-  availableSeats: z.number().int().min(0).max(4).optional(),
+  availableSeats: z.number().int().min(0).max(6).optional(),
 })
 
 adminRouter.patch('/trips/:id', async (req, res, next) => {
